@@ -4,12 +4,16 @@ import { v4 as uuidv4 } from 'uuid';
 import { GameState, GameResponse, GameConfig } from './types';
 import { evaluateGuess, isValidGuess } from './gameLogic';
 import { defaultConfig } from './config';
+import multiplayerRoutes from './multiplayerRoutes';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
+
+// Mount multiplayer routes
+app.use('/api/multiplayer', multiplayerRoutes);
 
 // In-memory storage for game states
 const games = new Map<string, GameState>();
@@ -194,4 +198,6 @@ app.get('/api/game/:gameId', (req: Request, res: Response) => {
 app.listen(PORT, () => {
   console.log(`Wordle backend server running on port ${PORT}`);
   console.log(`Configuration: Max Rounds = ${gameConfig.maxRounds}, Word List Size = ${gameConfig.wordList.length}`);
+  console.log(`Single-player: /api/game/*`);
+  console.log(`Multiplayer: /api/multiplayer/*`);
 });

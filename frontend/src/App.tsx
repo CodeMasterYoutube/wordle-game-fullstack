@@ -1,186 +1,172 @@
 import React, { useState, useEffect } from 'react';
-import GameBoard from './components/GameBoard';
-import Keyboard from './components/Keyboard';
-import { startNewGame, submitGuess, getConfig } from './api';
-import { GuessResult } from './types';
+import ModeSelection from './components/ModeSelection';
+import SinglePlayerGame from './components/SinglePlayerGame';
+import MultiplayerMenu from './components/MultiplayerMenu';
+import RoomLobby from './components/RoomLobby';
+import MultiplayerGame from './components/MultiplayerGame';
+import MultiplayerResults from './components/MultiplayerResults';
+import { GameStateUpdate } from './types';
+import { getGameState } from './api';
+
+type GameMode = 'menu' | 'single-player' | 'multiplayer-menu' | 'multiplayer-lobby' | 'multiplayer-game' | 'multiplayer-results';
 
 const App: React.FC = () => {
-  const [gameId, setGameId] = useState<string>('');
-  const [guesses, setGuesses] = useState<GuessResult[]>([]);
-  const [currentGuess, setCurrentGuess] = useState<string>('');
-  const [isWon, setIsWon] = useState<boolean>(false);
-  const [isLost, setIsLost] = useState<boolean>(false);
-  const [isOver, setIsOver] = useState<boolean>(false);
-  const [answer, setAnswer] = useState<string>('');
-  const [maxRounds, setMaxRounds] = useState<number>(6);
-  const [message, setMessage] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [gameMode, setGameMode] = useState<GameMode>('menu');
 
+  // Multiplayer state
+  const [roomId, setRoomId] = useState<string>('');
+  const [roomCode, setRoomCode] = useState<string>('');
+  const [playerId, setPlayerId] = useState<string>('');
+  const [playerName, setPlayerName] = useState<string>('');
+  const [playersCount, setPlayersCount] = useState<number>(1);
+  const [gameState, setGameState] = useState<GameStateUpdate | null>(null);
+
+  const handleSelectSinglePlayer = () => {
+    setGameMode('single-player');
+  };
+
+  const handleSelectMultiplayer = () => {
+    setGameMode('multiplayer-menu');
+  };
+
+  const handleBackToMenu = () => {
+    // Reset all state
+    setRoomId('');
+    setRoomCode('');
+    setPlayerId('');
+    setPlayerName('');
+    setPlayersCount(1);
+    setGameState(null);
+    setGameMode('menu');
+  };
+
+  const handleRoomCreated = (
+    newRoomId: string,
+    newRoomCode: string,
+    newPlayerId: string,
+    newPlayerName: string
+  ) => {
+    setRoomId(newRoomId);
+    setRoomCode(newRoomCode);
+    setPlayerId(newPlayerId);
+    setPlayerName(newPlayerName);
+    setPlayersCount(1);
+    setGameMode('multiplayer-lobby');
+  };
+
+  const handleRoomJoined = (
+    newRoomId: string,
+    newRoomCode: string,
+    newPlayerId: string,
+    newPlayerName: string
+  ) => {
+    setRoomId(newRoomId);
+    setRoomCode(newRoomCode);
+    setPlayerId(newPlayerId);
+    setPlayerName(newPlayerName);
+    setPlayersCount(2);
+    // Auto-start game when second player joins
+    setGameMode('multiplayer-game');
+  };
+
+  const handleStartGame = () => {
+    setGameMode('multiplayer-game');
+  };
+
+  const handleGameFinished = (finalGameState: GameStateUpdate) => {
+    setGameState(finalGameState);
+    setGameMode('multiplayer-results');
+  };
+
+  const handlePlayAgain = () => {
+    // Reset and go back to multiplayer menu
+    setRoomId('');
+    setRoomCode('');
+    setPlayerId('');
+    setPlayerName('');
+    setPlayersCount(1);
+    setGameState(null);
+    setGameMode('multiplayer-menu');
+  };
+
+  // Poll for room updates when in lobby (host waiting for players to join)
   useEffect(() => {
-    initializeGame();
-  }, []);
+    if (gameMode !== 'multiplayer-lobby' || !roomId) {
+      return;
+    }
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (isOver) return;
+    const pollRoomState = async () => {
+      try {
+        const state = await getGameState(roomId);
 
-      if (e.key === 'Enter') {
-        handleKeyPress('ENTER');
-      } else if (e.key === 'Backspace') {
-        handleKeyPress('BACKSPACE');
-      } else if (/^[a-zA-Z]$/.test(e.key)) {
-        handleKeyPress(e.key.toUpperCase());
+        // Update player count
+        setPlayersCount(state.players.length);
+
+        // Auto-start game when status becomes 'playing'
+        if (state.status === 'playing') {
+          setGameMode('multiplayer-game');
+        }
+      } catch (error) {
+        console.error('Error polling room state:', error);
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentGuess, isOver]);
+    // Poll immediately and then every 1.5 seconds
+    pollRoomState();
+    const interval = setInterval(pollRoomState, 1500);
 
-  const initializeGame = async () => {
-    try {
-      setIsLoading(true);
-      const config = await getConfig();
-      setMaxRounds(config.maxRounds);
-
-      const game = await startNewGame();
-      setGameId(game.gameId);
-      setGuesses([]);
-      setCurrentGuess('');
-      setIsWon(false);
-      setIsLost(false);
-      setIsOver(false);
-      setAnswer('');
-      setMessage('Start guessing!');
-    } catch (error) {
-      setMessage('Error starting game. Make sure the backend is running.');
-      console.error('Error initializing game:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleKeyPress = async (key: string) => {
-    if (isOver) return;
-
-    if (key === 'ENTER') {
-      if (currentGuess.length !== 5) {
-        setMessage('Word must be 5 letters');
-        return;
-      }
-
-      try {
-        setIsLoading(true);
-        const response = await submitGuess(gameId, currentGuess);
-
-        setGuesses(response.guesses);
-        setCurrentGuess('');
-        setIsWon(response.isWon);
-        setIsLost(response.isLost);
-        setIsOver(response.isOver);
-
-        if (response.isWon) {
-          setMessage('Congratulations! You won!');
-          setAnswer(response.answer || '');
-        } else if (response.isLost) {
-          setMessage(`Game Over! The word was: ${response.answer}`);
-          setAnswer(response.answer || '');
-        } else {
-          setMessage(`${response.remainingRounds} guesses remaining`);
-        }
-      } catch (error: any) {
-        setMessage(error.message || 'Error submitting guess');
-        console.error('Error submitting guess:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    } else if (key === 'BACKSPACE') {
-      setCurrentGuess((prev) => prev.slice(0, -1));
-    } else if (currentGuess.length < 5) {
-      setCurrentGuess((prev) => prev + key);
-    }
-  };
+    return () => clearInterval(interval);
+  }, [gameMode, roomId]);
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        minHeight: '100vh',
-        backgroundColor: '#ffffff',
-        padding: '20px',
-      }}
-    >
-      <h1
-        style={{
-          fontSize: '36px',
-          fontWeight: 'bold',
-          margin: '10px 0',
-          borderBottom: '1px solid #d3d6da',
-          paddingBottom: '10px',
-          width: '500px',
-          textAlign: 'center',
-        }}
-      >
-        WORDLE
-      </h1>
-
-      <div
-        style={{
-          fontSize: '18px',
-          marginTop: '10px',
-          height: '30px',
-          fontWeight: isWon || isLost ? 'bold' : 'normal',
-          color: isWon ? '#6aaa64' : isLost ? '#787c7e' : '#000000',
-        }}
-      >
-        {message}
-      </div>
-
-      {isLoading && (
-        <div style={{ fontSize: '16px', color: '#787c7e', marginTop: '10px' }}>
-          Loading...
-        </div>
+    <>
+      {gameMode === 'menu' && (
+        <ModeSelection
+          onSelectSinglePlayer={handleSelectSinglePlayer}
+          onSelectMultiplayer={handleSelectMultiplayer}
+        />
       )}
 
-      <GameBoard guesses={guesses} currentGuess={currentGuess} maxRounds={maxRounds} />
-
-      <Keyboard onKeyPress={handleKeyPress} guesses={guesses} />
-
-      {isOver && (
-        <button
-          onClick={initializeGame}
-          style={{
-            marginTop: '30px',
-            padding: '15px 30px',
-            fontSize: '18px',
-            fontWeight: 'bold',
-            backgroundColor: '#6aaa64',
-            color: '#ffffff',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-        >
-          Play Again
-        </button>
+      {gameMode === 'single-player' && (
+        <SinglePlayerGame onBackToMenu={handleBackToMenu} />
       )}
 
-      <div
-        style={{
-          marginTop: '30px',
-          fontSize: '14px',
-          color: '#787c7e',
-          textAlign: 'center',
-        }}
-      >
-        <div>Max Rounds: {maxRounds}</div>
-        <div style={{ marginTop: '10px' }}>
-          Use your keyboard or click the on-screen keyboard to play
-        </div>
-      </div>
-    </div>
+      {gameMode === 'multiplayer-menu' && (
+        <MultiplayerMenu
+          onRoomCreated={handleRoomCreated}
+          onRoomJoined={handleRoomJoined}
+          onBack={handleBackToMenu}
+        />
+      )}
+
+      {gameMode === 'multiplayer-lobby' && (
+        <RoomLobby
+          roomCode={roomCode}
+          playerName={playerName}
+          playersCount={playersCount}
+          onStartGame={handleStartGame}
+        />
+      )}
+
+      {gameMode === 'multiplayer-game' && (
+        <MultiplayerGame
+          roomId={roomId}
+          roomCode={roomCode}
+          playerId={playerId}
+          playerName={playerName}
+          onGameFinished={handleGameFinished}
+        />
+      )}
+
+      {gameMode === 'multiplayer-results' && gameState && (
+        <MultiplayerResults
+          gameState={gameState}
+          playerId={playerId}
+          onPlayAgain={handlePlayAgain}
+          onMainMenu={handleBackToMenu}
+        />
+      )}
+    </>
   );
 };
 
