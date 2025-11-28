@@ -63,7 +63,36 @@ Wordle-fullstack/
 
 ## Installation
 
-### Backend
+### Option 1: Docker (Recommended - Easiest)
+
+**Prerequisites**: Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+
+**Quick Start:**
+```bash
+# Run the entire application with one command
+docker-compose up
+
+# Or run in background
+docker-compose up -d
+
+# Access the app:
+# Frontend: http://localhost:3000
+# Backend: http://localhost:3001
+
+# Stop the application
+docker-compose down
+```
+
+**Development Mode with Hot Reload:**
+```bash
+docker-compose -f docker-compose.dev.yml up
+```
+
+For detailed Docker instructions, see [DOCKER.md](DOCKER.md)
+
+### Option 2: Manual Installation
+
+#### Backend
 
 ```bash
 cd backend
@@ -76,7 +105,7 @@ npm start       # Production mode
 
 The backend server will run on `http://localhost:3001`
 
-### Frontend
+#### Frontend
 
 ```bash
 cd frontend
@@ -449,16 +478,33 @@ Each player has a status: `waiting`, `playing`, `won`, or `finished`. This enabl
 
 ## Development
 
-### Backend Development
+### With Docker (Recommended)
+```bash
+# Start both services with hot reload
+docker-compose -f docker-compose.dev.yml up
+
+# View logs
+docker-compose -f docker-compose.dev.yml logs -f
+
+# Restart services
+docker-compose -f docker-compose.dev.yml restart
+
+# Stop services
+docker-compose -f docker-compose.dev.yml down
+```
+
+### Without Docker
+
+#### Backend Development
 ```bash
 cd backend
 npm run dev  # Uses ts-node for hot reload
 ```
 
-### Frontend Development
+#### Frontend Development
 ```bash
 cd frontend
 npm start  # Webpack dev server with hot module replacement
 ```
 
-Both servers support hot reload for faster development.
+Both methods support hot reload for faster development.
