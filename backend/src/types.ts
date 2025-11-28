@@ -60,6 +60,7 @@ export interface MultiplayerRoom {
   answer: string;
   maxRounds: number;
   maxPlayers: 2;
+  currentTurnPlayerId?: string;
   createdAt: Date;
   startedAt?: Date;
   finishedAt?: Date;
@@ -96,6 +97,7 @@ export interface GameStateUpdate {
   currentMaxRound: number;
   maxRounds: number;
   status: RoomStatus;
+  currentTurnPlayerId?: string;
   winner?: string;
   finalResults?: FinalResults;
 }

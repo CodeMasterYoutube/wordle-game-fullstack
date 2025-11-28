@@ -21,13 +21,15 @@ const MultiplayerGame: React.FC<MultiplayerGameProps> = ({
 }) => {
   const [gameState, setGameState] = useState<GameStateUpdate | null>(null);
   const [currentGuess, setCurrentGuess] = useState('');
-  const [message, setMessage] = useState('Start guessing!');
+  const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [hasShownStartMessage, setHasShownStartMessage] = useState(false);
 
   const currentPlayer = gameState?.players.find(p => p.playerId === playerId);
   const opponent = gameState?.players.find(p => p.playerId !== playerId);
   const isGameOver = gameState?.status === 'finished';
   const hasPlayerFinished = currentPlayer?.status === 'won' || currentPlayer?.status === 'finished';
+  const isMyTurn = gameState?.currentTurnPlayerId === playerId;
 
   // Poll for game state updates every 1.5 seconds
   const pollGameState = useCallback(async () => {
@@ -35,13 +37,24 @@ const MultiplayerGame: React.FC<MultiplayerGameProps> = ({
       const state = await getGameState(roomId);
       setGameState(state);
 
+      // Show who starts first (only once at the beginning)
+      if (!hasShownStartMessage && state.currentTurnPlayerId) {
+        const startingPlayer = state.players.find(p => p.playerId === state.currentTurnPlayerId);
+        if (state.currentTurnPlayerId === playerId) {
+          setMessage('You start first! Make your guess.');
+        } else {
+          setMessage(`${startingPlayer?.playerName} starts first!`);
+        }
+        setHasShownStartMessage(true);
+      }
+
       if (state.status === 'finished') {
         onGameFinished(state);
       }
     } catch (error) {
       console.error('Error polling game state:', error);
     }
-  }, [roomId, onGameFinished]);
+  }, [roomId, onGameFinished, playerId, hasShownStartMessage]);
 
   useEffect(() => {
     pollGameState();
@@ -51,7 +64,7 @@ const MultiplayerGame: React.FC<MultiplayerGameProps> = ({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isGameOver || hasPlayerFinished) return;
+      if (isGameOver || hasPlayerFinished || !isMyTurn) return;
 
       if (e.key === 'Enter') {
         handleKeyPress('ENTER');
@@ -64,10 +77,10 @@ const MultiplayerGame: React.FC<MultiplayerGameProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentGuess, isGameOver, hasPlayerFinished]);
+  }, [currentGuess, isGameOver, hasPlayerFinished, isMyTurn]);
 
   const handleKeyPress = async (key: string) => {
-    if (isGameOver || hasPlayerFinished) return;
+    if (isGameOver || hasPlayerFinished || !isMyTurn) return;
 
     if (key === 'ENTER') {
       if (currentGuess.length !== 5) {
@@ -84,10 +97,13 @@ const MultiplayerGame: React.FC<MultiplayerGameProps> = ({
 
         if (response.gameState.status === 'finished') {
           onGameFinished(response.gameState);
-        } else if (currentPlayer && currentPlayer.hasWon) {
-          setMessage('You guessed correctly! Waiting for opponent...');
         } else {
-          setMessage(`+${response.score} points! Keep guessing...`);
+          const guessedCorrectly = response.guessResult.result.every(r => r.status === 'hit');
+          if (guessedCorrectly) {
+            setMessage('You guessed correctly! Waiting for opponent...');
+          } else {
+            setMessage(`+${response.score} points! ${opponent?.playerName}'s turn now.`);
+          }
         }
       } catch (error: any) {
         setMessage(error.message || 'Error submitting guess');
@@ -177,11 +193,13 @@ const MultiplayerGame: React.FC<MultiplayerGameProps> = ({
             textAlign: 'center',
             height: '30px',
             marginBottom: '20px',
-            fontWeight: hasPlayerFinished ? 'bold' : 'normal',
-            color: hasPlayerFinished ? '#6aaa64' : '#000000',
+            fontWeight: hasPlayerFinished || !isMyTurn ? 'bold' : 'normal',
+            color: hasPlayerFinished ? '#6aaa64' : (!isMyTurn ? '#c9b458' : '#000000'),
           }}
         >
-          {message}
+          {hasPlayerFinished
+            ? message
+            : (isMyTurn ? message : `${opponent?.playerName}'s turn...`)}
         </div>
 
         <div
@@ -246,7 +264,7 @@ const MultiplayerGame: React.FC<MultiplayerGameProps> = ({
             )}
             <GameBoard
               guesses={currentPlayer.guesses}
-              currentGuess={hasPlayerFinished ? '' : currentGuess}
+              currentGuess={hasPlayerFinished || !isMyTurn ? '' : currentGuess}
               maxRounds={gameState.maxRounds}
             />
           </div>
@@ -359,8 +377,24 @@ const MultiplayerGame: React.FC<MultiplayerGameProps> = ({
           </div>
         </div>
 
-        {!hasPlayerFinished && (
+        {!hasPlayerFinished && isMyTurn && (
           <Keyboard onKeyPress={handleKeyPress} guesses={currentPlayer.guesses} />
+        )}
+
+        {!hasPlayerFinished && !isMyTurn && (
+          <div
+            style={{
+              textAlign: 'center',
+              padding: '20px',
+              backgroundColor: '#fff9e6',
+              borderRadius: '8px',
+              fontSize: '16px',
+              color: '#c9b458',
+              fontWeight: 'bold',
+            }}
+          >
+            Waiting for {opponent?.playerName} to play their turn...
+          </div>
         )}
 
         {hasPlayerFinished && !isGameOver && (

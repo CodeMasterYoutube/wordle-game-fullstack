@@ -126,6 +126,9 @@ export function joinRoom(roomCode: string, playerName: string): { roomId: string
     room.status = 'playing';
     room.startedAt = new Date();
     room.players.forEach(p => p.status = 'playing');
+    // Randomly select who goes first
+    const randomIndex = Math.floor(Math.random() * 2);
+    room.currentTurnPlayerId = room.players[randomIndex].playerId;
   }
 
   return { roomId, playerId };
@@ -169,6 +172,11 @@ export function submitMultiplayerGuess(
     throw new Error('Player has already finished');
   }
 
+  // Validate it's the player's turn
+  if (room.currentTurnPlayerId && room.currentTurnPlayerId !== playerId) {
+    throw new Error('It is not your turn');
+  }
+
   // Add guess to player's history
   player.guesses.push(guessResult);
 
@@ -190,6 +198,12 @@ export function submitMultiplayerGuess(
     player.roundsUsed = player.guesses.length;
   }
 
+  // Switch turn to the other player (if both are still playing)
+  const otherPlayer = room.players.find(p => p.playerId !== playerId);
+  if (otherPlayer && otherPlayer.status === 'playing') {
+    room.currentTurnPlayerId = otherPlayer.playerId;
+  }
+
   // Check if game is over (all players finished)
   const allPlayersFinished = room.players.every(
     p => p.status === 'won' || p.status === 'finished'
@@ -198,6 +212,7 @@ export function submitMultiplayerGuess(
   if (allPlayersFinished) {
     room.status = 'finished';
     room.finishedAt = new Date();
+    room.currentTurnPlayerId = undefined;
   }
 
   return { success: true, score: guessScore };
@@ -302,6 +317,7 @@ export function getGameState(roomId: string): GameStateUpdate | null {
     currentMaxRound,
     maxRounds: room.maxRounds,
     status: room.status,
+    currentTurnPlayerId: room.currentTurnPlayerId,
     winner: finalResults?.winner,
     finalResults,
   };

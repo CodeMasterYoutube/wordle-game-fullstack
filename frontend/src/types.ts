@@ -61,6 +61,7 @@ export interface GameStateUpdate {
   currentMaxRound: number;
   maxRounds: number;
   status: RoomStatus;
+  currentTurnPlayerId?: string;
   winner?: string;
   finalResults?: FinalResults;
 }
